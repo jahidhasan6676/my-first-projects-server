@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -29,47 +30,115 @@ async function run() {
     const usersCollection = db.collection("users")
     const productsCollection = db.collection("products")
 
-    // users api
 
-    app.post("/user/:email", async(req,res) =>{
-        const email = req.params.email;
-        const user = req.body;
-        const query = {email};
-        // check user already save in database
-        const isExist = await usersCollection.findOne(query)
-        if(isExist){
-            return res.send(isExist)
-        }
-
-        const result = await usersCollection.insertOne({...user,role:"customer",timestamp:Date.now()})
-        res.send(result)
-
+    // jwt related api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.JWT_ACCESS_TOKEN, {
+        expiresIn: "10h"
+      });
+      res.send({ token })
     })
 
+    // middleware
+
+    // verify token middleware
+    const verifyToken = (req, res, next) => {
+      if (!req.headers.authorization) {
+        return res.status(403).send({ message: "unauthorized access" })
+      }
+      const token = req.headers.authorization.split(' ')[1];
+      jwt.verify(token, process.env.JWT_ACCESS_TOKEN, (err, decoded) => {
+        if (err) {
+          return res.status(403).send({ message: "unauthorized access" })
+        }
+        req.decoded = decoded;
+        next();
+      })
+    }
+
+    //  verify admin middleware
+    app.verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== 'admin') {
+        return res.status(403).send({ message: 'Forbidden! Admin access required' })
+      }
+      next();
+    }
+
+    // verify moderator middleware
+    const verifyModerator = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== 'moderator') {
+        return res.status(403).send({ message: 'Forbidden! Moderator access required' })
+      }
+      next();
+    }
+    // verify seller middleware
+    const verifySeller = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== 'seller') {
+        return res.status(403).send({ message: 'Forbidden! Seller access required' })
+      }
+      next();
+    }
+
+
+    // users api
+
+    app.post("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const query = { email };
+      // check user already save in database
+      const isExist = await usersCollection.findOne(query)
+      if (isExist) {
+        return res.send(isExist)
+      }
+      const result = await usersCollection.insertOne({ ...user, role: "customer", timestamp: Date.now() })
+      res.send(result)
+
+    });
+
+    // get user role from database
+    app.get('/user/role/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send({ role: result?.role })
+
+    });
+
     // store products in database
-    app.post("/product", async(req,res) =>{
+    app.post("/product", async (req, res) => {
       const product = req.body;
       const result = await productsCollection.insertOne(product);
       res.send(result)
     })
 
     // get all product data from database 
-    app.get("/products", async(req,res) =>{
+    app.get("/products", async (req, res) => {
       const result = await productsCollection.find().toArray();
       res.send(result)
     })
     // get database product by id
-    app.get("/products/:id", async(req,res) =>{
+    app.get("/products/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await productsCollection.findOne(query);
       res.send(result)
     })
 
     // get specific data get database by email
-    app.get("/products/emailed/:email", async(req,res) =>{
+    app.get("/products/emailed/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      const query = {"ownerInfo.email":email};
+      const query = { "ownerInfo.email": email };
       const result = await productsCollection.find(query).toArray();
       res.send(result)
     })
@@ -88,9 +157,9 @@ run().catch(console.dir);
 
 
 app.get("/", (req, res) => {
-    res.send('shopper server is running');
-  });
-  
-  app.listen(port, () => {
-    console.log(`server port is: ${port}`)
-  })
+  res.send('shopper server is running');
+});
+
+app.listen(port, () => {
+  console.log(`server port is: ${port}`)
+})
