@@ -58,7 +58,7 @@ async function run() {
     }
 
     //  verify admin middleware
-    app.verifyAdmin = async (req, res, next) => {
+    const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
       const query = { email: email };
       const result = await usersCollection.findOne(query);
@@ -115,20 +115,22 @@ async function run() {
 
     });
 
+    // seller work
+
     // store products in database
-    app.post("/product", async (req, res) => {
+    app.post("/product", verifyToken, verifySeller, async (req, res) => {
       const product = req.body;
       const result = await productsCollection.insertOne(product);
       res.send(result)
     })
 
     // get all product data from database 
-    app.get("/products", async (req, res) => {
+    app.get("/products", verifyToken, verifySeller, async (req, res) => {
       const result = await productsCollection.find().toArray();
       res.send(result)
     })
     // get database product by id
-    app.get("/products/:id", async (req, res) => {
+    app.get("/products/:id", verifyToken, verifySeller, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await productsCollection.findOne(query);
@@ -136,10 +138,38 @@ async function run() {
     })
 
     // get specific data get database by email
-    app.get("/products/emailed/:email", verifyToken, async (req, res) => {
+    app.get("/products/emailed/:email", verifyToken, verifySeller, async (req, res) => {
       const email = req.params.email;
       const query = { "ownerInfo.email": email };
       const result = await productsCollection.find(query).toArray();
+      res.send(result)
+    })
+
+    // single product delete database and UI
+    app.delete("/product/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await productsCollection.deleteOne(query);
+      res.send(result)
+    })
+
+    // single product delete database and UI
+    app.patch("/product-update/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          productName: data?.productName,
+          manCategory: data?.manCategory,
+          productCategory: data?.productCategory,
+          description: data?.description,
+          quantity: data?.quantity,
+          price: data?.price,
+          brandName: data?.brandName
+        }
+      }
+      const result = await productsCollection.updateOne(query, updateDoc);
       res.send(result)
     })
 
