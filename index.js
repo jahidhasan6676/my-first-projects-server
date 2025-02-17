@@ -176,32 +176,62 @@ async function run() {
     // moderator work
 
     // all pending product get from database
-    app.get("/all-pending-product", verifyToken,verifyModerator, async(req,res) =>{
-      const result = await productsCollection.find({status: "Pending"}).toArray();
+    app.get("/all-pending-product", verifyToken, verifyModerator, async (req, res) => {
+      const result = await productsCollection.find({ status: "Pending" }).toArray();
       res.send(result)
     })
 
     // product status update
-    app.patch("/product-update-status/:id", verifyToken,verifyModerator, async(req,res) =>{
+    app.patch("/product-update-status/:id", verifyToken, verifyModerator, async (req, res) => {
       const id = req.params.id;
       const data = req.body;
-      const query = {_id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const updateDoc = {
-        $set:{status: data?.status}
+        $set: { status: data?.status }
       }
-      const result = await productsCollection.updateOne(query,updateDoc);
+      const result = await productsCollection.updateOne(query, updateDoc);
       res.send(result)
     })
 
     // all pending product get from database
-    app.get("/all-approve-product", verifyToken,verifyModerator, async(req,res) =>{
-      const result = await productsCollection.find({status: "Approve"}).toArray();
+    app.get("/all-approve-product", verifyToken, verifyModerator, async (req, res) => {
+      const result = await productsCollection.find({ status: "Approve" }).toArray();
       res.send(result)
     })
 
     // all pending product get from database
-    app.get("/all-reject-product", verifyToken,verifyModerator, async(req,res) =>{
-      const result = await productsCollection.find({status: "Reject"}).toArray();
+    app.get("/all-reject-product", verifyToken, verifyModerator, async (req, res) => {
+      const result = await productsCollection.find({ status: "Reject" }).toArray();
+      res.send(result)
+    })
+
+    // customer work
+
+    // men category data get from database
+    app.get("/men-category-product", async (req, res) => {
+      const result = await productsCollection.find({ manCategory: "Men", status: "Approve" }).toArray();
+      res.send(result)
+    })
+
+    // admin work
+
+    // admin get all users data from database
+    app.get("/all-users/:email", verifyToken, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: { $ne: email } }
+      const result = await usersCollection.find(query).toArray();
+      res.send(result)
+    })
+
+    // admin update user role
+    app.patch("/user-role/:email", verifyToken, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const { role } = req.body;
+      const filter = { email }
+      const updateDoc = {
+        $set: { role }
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result)
     })
 
