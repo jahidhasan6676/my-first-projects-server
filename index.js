@@ -173,6 +173,26 @@ async function run() {
       res.send(result)
     })
 
+    // moderator work
+
+    // all pending product get from database
+    app.get("/all-pending-product", verifyToken,verifyModerator, async(req,res) =>{
+      const result = await productsCollection.find({status: "Pending"}).toArray();
+      res.send(result)
+    })
+
+    // product status update
+    app.patch("/product-update-status/:id", verifyToken,verifyModerator, async(req,res) =>{
+      const id = req.params.id;
+      const data = req.body;
+      const query = {_id: new ObjectId(id)}
+      const updateDoc = {
+        $set:{status: data?.status}
+      }
+      const result = await productsCollection.updateOne(query,updateDoc);
+      res.send(result)
+    })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
