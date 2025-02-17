@@ -193,6 +193,18 @@ async function run() {
       res.send(result)
     })
 
+    // all pending product get from database
+    app.get("/all-approve-product", verifyToken,verifyModerator, async(req,res) =>{
+      const result = await productsCollection.find({status: "Approve"}).toArray();
+      res.send(result)
+    })
+
+    // all pending product get from database
+    app.get("/all-reject-product", verifyToken,verifyModerator, async(req,res) =>{
+      const result = await productsCollection.find({status: "Reject"}).toArray();
+      res.send(result)
+    })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
