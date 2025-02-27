@@ -206,10 +206,17 @@ async function run() {
     })
 
     // customer work
-
-    // men category data get from database
-    app.get("/men-category-product", async (req, res) => {
-      const result = await productsCollection.find({ manCategory: "Men", status: "Approve" }).toArray();
+    
+    // get all approve product
+    app.get("/allProduct", async (req, res) => {
+      const result = await productsCollection.find({status: "Approve" }).toArray();
+      res.send(result)
+    })
+    // get all approve product by id
+    app.get("/allProduct/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await productsCollection.find(query).toArray();
       res.send(result)
     })
 
