@@ -32,6 +32,8 @@ async function run() {
     const db = client.db("Shopper");
     const usersCollection = db.collection("users")
     const productsCollection = db.collection("products")
+    const itemsCollection = db.collection("items")
+    const wishlistCollection = db.collection("wishlist")
 
 
     // jwt related api
@@ -227,6 +229,32 @@ async function run() {
     // get latest 10 product
     app.get("/latest-product", async(req,res) =>{
       const result = await productsCollection.find({status: "Approve"}).sort({date: -1}).limit(10).toArray();
+      res.send(result)
+    })
+
+    // customer product select item add database
+    app.post("/productItem", verifyToken, async(req,res) =>{
+      const productData = req.body;
+      const result = await itemsCollection.insertOne(productData);
+      res.send(result)
+    })
+
+    // customer product select item add database
+    app.post("/wishlistItem", async(req,res) =>{
+      const productData = req.body;
+      const result = await wishlistCollection.insertOne(productData);
+      res.send(result)
+    })
+
+    // get all item product from database
+    app.get("/allItemProduct", verifyToken, async(req,res) =>{
+      const result = await itemsCollection.find().toArray();
+      res.send(result)
+    })
+
+    // item count
+    app.get("/wishlist", async(req,res) =>{
+      const result = await wishlistCollection.find().toArray();
       res.send(result)
     })
 
