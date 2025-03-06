@@ -211,81 +211,125 @@ async function run() {
     })
 
     // customer work
-    
+
     // get all approve product
     app.get("/allProduct", async (req, res) => {
-      const result = await productsCollection.find({status: "Approve" }).toArray();
+      const result = await productsCollection.find({ status: "Approve" }).toArray();
       res.send(result)
     })
 
     // get all approve product by id
     app.get("/allProduct/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await productsCollection.find(query).toArray();
       res.send(result)
     })
 
     // get latest 10 product
-    app.get("/latest-product", async(req,res) =>{
-      const result = await productsCollection.find({status: "Approve"}).sort({date: -1}).limit(10).toArray();
+    app.get("/latest-product", async (req, res) => {
+      const result = await productsCollection.find({ status: "Approve" }).sort({ date: -1 }).limit(10).toArray();
       res.send(result)
     })
 
+    // top 5 wishlist product get from database
+    app.get("/top-wishlist-product", async (req, res) => {
+      const topWishlistProduct = await wishlistCollection.aggregate([
+        {
+          $group: {
+            _id: "$productId",
+            wishlistCount: { $sum: 1 }
+          }
+        },
+        {
+          $addFields: {
+            productObjId: { $toObjectId: "$_id" }
+          }
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productObjId",
+            foreignField: "_id",
+            as: "productInfo"
+          }
+        },
+        {
+          $unwind: "$productInfo"
+        },
+        {
+          $sort: { wishlistCount: -1 }
+        },
+        {
+          $limit: 5
+        },
+        {
+          $project: {
+            _id: "$productInfo._id",
+            productName: "$productInfo.productName",
+            photo: "$productInfo.photo",
+            price: "$productInfo.price",
+            wishlistCount: 1
+          }
+        }
+      ]).toArray();
+      res.send(topWishlistProduct);
+    })
+
     // customer product select item add database
-    app.post("/productItem", verifyToken, async(req,res) =>{
+    app.post("/productItem", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await cartsCollection.insertOne(productData);
       res.send(result)
     })
 
     // customer product select item add database
-    app.post("/wishlistItem", async(req,res) =>{
+    app.post("/wishlistItem", async (req, res) => {
       const productData = req.body;
       const result = await wishlistCollection.insertOne(productData);
       res.send(result)
     })
 
     // specific customer wishlist product delete from database
-    app.delete("/wishlistProduct-delete/:id", async(req,res) =>{
+    app.delete("/wishlistProduct-delete/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const result = await wishlistCollection.deleteOne(query);
       res.send(result)
     })
 
     // get cart item from database by email
-    app.get("/cart-product/:email", verifyToken, async(req,res) =>{
+    app.get("/cart-product/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      const query = {email: email}
+      const query = { email: email }
       const result = await cartsCollection.find(query).toArray();
       res.send(result)
     })
 
     // specific customer cart product delete from database
-    app.delete("/cart-product-delete/:id",verifyToken, async(req,res) =>{
+    app.delete("/cart-product-delete/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)}
+      const query = { _id: new ObjectId(id) }
       const result = await cartsCollection.deleteOne(query);
       res.send(result)
     })
 
     // cart collection order quantity update
-    app.patch("/cart-quantity-update/:id", verifyToken, async(req,res) =>{
+    app.patch("/cart-quantity-update/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const data = req.body;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const updateDoc = {
-        $set:{orderQuantity: data?.newQuantity}
+        $set: { orderQuantity: data?.newQuantity }
       }
-      const result = await cartsCollection.updateOne(query,updateDoc);
+      const result = await cartsCollection.updateOne(query, updateDoc);
       res.send(result)
     })
 
     // get wishlist product by specific customer
-    app.get("/wishlist/:email", async(req,res) =>{
+    app.get("/wishlist/:email", async (req, res) => {
       const email = req.params.email;
-      const query = {email: email};
+      const query = { email: email };
       const result = await wishlistCollection.find(query).toArray();
       res.send(result)
     })
