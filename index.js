@@ -180,6 +180,64 @@ async function run() {
       res.send(result)
     })
 
+
+
+
+    app.get("/new-orders/:email", verifyToken, verifySeller, async (req, res) => {
+      const email = req.params.email;
+      const query = { 'ownerInfo.email': email };
+
+      const products = await productsCollection.find(query).toArray();
+      const productIds = products.map(product => product._id.toString());
+
+      const orders = await paymentCollection.aggregate([
+        {
+          $match: {
+            productIds: { $in: productIds }
+          }
+        },
+        {
+          $addFields: {
+            productIds: {
+              $map: {
+                input: "$productIds",
+                as: "productId",
+                in: { $toObjectId: "$$productId" }
+              }
+            }
+          }
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productIds",
+            foreignField: "_id",
+            as: "productItems"
+          }
+        },
+        {
+          $project: {
+            email: 1,
+            name: 1,
+            price: 1,
+            transactionId: 1,
+            status: 1,
+            deliveryInfo: 1,
+            payment: 1,
+            method: 1,
+            date: 1,
+            "productItems.productName": 1,
+          }
+        }
+      ]).toArray();
+      res.send(orders);
+
+    });
+
+
+
+
+
     // moderator work
 
     // all pending product get from database
@@ -336,6 +394,14 @@ async function run() {
       res.send(result)
     })
 
+    // get successfully payment order data
+    app.get("/order-list/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result)
+    })
+
     // admin work
 
     // admin get all users data from database
@@ -359,9 +425,10 @@ async function run() {
     })
 
 
+
     // payment intent
-    app.post("/payment-intent", async(req,res) =>{
-      const {price} = req.body;
+    app.post("/payment-intent", async (req, res) => {
+      const { price } = req.body;
       const amount = parseInt(price * 100);
 
       const paymentIntent = await stripe.paymentIntents.create({
@@ -376,18 +443,20 @@ async function run() {
     })
 
     // payment info save database
-    app.post("/payments", verifyToken, async(req,res) =>{
+    app.post("/payments", verifyToken, async (req, res) => {
       const payment = req.body;
       const paymentResult = await paymentCollection.insertOne(payment);
 
       // delete each item from the cart
-      const query = {_id: {
-        $in: payment.cartIds.map(id => new ObjectId(id))
-      }}
+      const query = {
+        _id: {
+          $in: payment.cartIds.map(id => new ObjectId(id))
+        }
+      }
 
       const deleteResult = await cartsCollection.deleteMany(query)
 
-      res.send({paymentResult,deleteResult});
+      res.send({ paymentResult, deleteResult });
     })
 
 
