@@ -9,6 +9,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 app.use(cors([
   "https://shopper-application-3cae2.web.app",
+  "https://shopper-application-3cae2.firebaseapp.com",
   "http://localhost:5173"
 ]));
 app.use(express.json());
@@ -180,9 +181,7 @@ async function run() {
       res.send(result)
     })
 
-
-
-
+    // seller product buy customer this order product get from database
     app.get("/new-orders/:email", verifyToken, verifySeller, async (req, res) => {
       const email = req.params.email;
       const query = { 'ownerInfo.email': email };
@@ -234,8 +233,17 @@ async function run() {
 
     });
 
-
-
+    // order product delivery update
+    app.patch("/order-placed-update/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const orderPlaced = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: { status: orderPlaced?.newOrderPlaced }
+      }
+      const result = await paymentCollection.updateOne(query, updateDoc);
+      res.send(result);
+    })
 
 
     // moderator work
@@ -291,67 +299,34 @@ async function run() {
       const result = await productsCollection.find({ status: "Approve" }).sort({ date: -1 }).limit(10).toArray();
       res.send(result)
     })
-
-    // top 5 wishlist product get from database
-    app.get("/top-wishlist-product", async (req, res) => {
-      const topWishlistProduct = await wishlistCollection.aggregate([
-        {
-          $group: {
-            _id: "$productId",
-            wishlistCount: { $sum: 1 }
-          }
-        },
-        {
-          $addFields: {
-            productObjId: { $toObjectId: "$_id" }
-          }
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: "productObjId",
-            foreignField: "_id",
-            as: "productInfo"
-          }
-        },
-        {
-          $unwind: "$productInfo"
-        },
-        {
-          $sort: { wishlistCount: -1 }
-        },
-        {
-          $limit: 5
-        },
-        {
-          $project: {
-            _id: "$productInfo._id",
-            productName: "$productInfo.productName",
-            photo: "$productInfo.photo",
-            price: "$productInfo.price",
-            wishlistCount: 1
-          }
-        }
-      ]).toArray();
-      res.send(topWishlistProduct);
-    })
-
-    // customer product select item add database
-    app.post("/productItem", verifyToken, async (req, res) => {
+   
+    // customer product select cart item add database
+    app.post("/cartItem", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await cartsCollection.insertOne(productData);
       res.send(result)
     })
 
-    // customer product select item add database
-    app.post("/wishlistItem", async (req, res) => {
+    // cart item count by specific customer
+    app.get("/count/:email", async(req,res) =>{
+      const email = req.params.email;
+      const query = {email: email};
+      const cartCount = await cartsCollection.countDocuments(query);
+      const wishCount = await wishlistCollection.countDocuments(query);
+      
+      res.send({cartCount,wishCount})
+
+    })
+
+    // customer product select wish item add database
+    app.post("/wishlistItem",verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await wishlistCollection.insertOne(productData);
       res.send(result)
     })
 
     // specific customer wishlist product delete from database
-    app.delete("/wishlistProduct-delete/:id", async (req, res) => {
+    app.delete("/wishlistProduct-delete/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await wishlistCollection.deleteOne(query);
@@ -401,6 +376,32 @@ async function run() {
       const result = await paymentCollection.find(query).toArray();
       res.send(result)
     })
+
+    app.get("/top-seller-product", async (req, res) => {
+        
+        const payments = await paymentCollection.find({ payment: "success" }).toArray();
+       
+        let productIdCounts = {};
+        payments.forEach(payment => {
+          payment.productIds.forEach(productId => {
+            productIdCounts[productId] = (productIdCounts[productId] || 0) + 1; 
+          });
+        });
+        
+        const sortedProductIds = Object.entries(productIdCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5) 
+          .map(item => item[0]);
+        
+        const topProducts = await productsCollection.find({
+          _id: { $in: sortedProductIds.map(id => new ObjectId(id)) }
+        }).toArray();
+        res.json(topProducts);
+     
+    })
+
+
+
 
     // admin work
 
