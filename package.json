@@ -16,6 +16,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.13.0",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "webidl2js": "^18.0.0",
+    "whatwg-url": "^14.2.0"
   }
 }
