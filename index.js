@@ -289,8 +289,6 @@ async function run() {
           max = 1000,
           search = "",
           sort = "",
-          page = 1,
-          limit = 10
         } = req.query;
 
         const query = { status: "Approve" };
@@ -314,20 +312,14 @@ async function run() {
           sortQuery.price = 1;
         } else if (sort === "price-high") {
           sortQuery.price = -1;
-        } else {
-          sortQuery._id = -1; // default: latest first
-        }
-
-        // Pagination
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        } 
 
         // Get filtered and sorted products
         const result = await productsCollection
           .find(query)
           .sort(sortQuery)
-          .skip(skip)
-          .limit(parseInt(limit))
           .toArray();
+          console.log("data:",result)
 
         // Get total count for pagination
         const total = await productsCollection.countDocuments(query);
