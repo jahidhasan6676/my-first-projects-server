@@ -36,6 +36,7 @@ async function run() {
     const cartsCollection = db.collection("carts");
     const wishlistCollection = db.collection("wishlist");
     const paymentCollection = db.collection("payments");
+    const blogsCollection = db.collection("blogs");
 
 
     // jwt related api
@@ -281,9 +282,63 @@ async function run() {
 
     // get all approve product
     app.get("/allProduct", async (req, res) => {
-      const result = await productsCollection.find({ status: "Approve" }).toArray();
-      res.send(result)
-    })
+      try {
+        const {
+          manCategory = "all",
+          min = 0,
+          max = 1000,
+          search = "",
+          sort = "",
+          page = 1,
+          limit = 10
+        } = req.query;
+
+        const query = { status: "Approve" };
+
+        // Category Filter
+        if (manCategory !== "all") {
+          query.manCategory = manCategory;
+        }
+
+        // Price Range Filter
+        query.price = { $gte: parseFloat(min), $lte: parseFloat(max) };
+
+        // Search Filter
+        if (search) {
+          query.productName = { $regex: search, $options: "i" }; 
+        }
+
+        // Sorting
+        let sortQuery = {};
+        if (sort === "price-low") {
+          sortQuery.price = 1;
+        } else if (sort === "price-high") {
+          sortQuery.price = -1;
+        } else {
+          sortQuery._id = -1; // default: latest first
+        }
+
+        // Pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Get filtered and sorted products
+        const result = await productsCollection
+          .find(query)
+          .sort(sortQuery)
+          .skip(skip)
+          .limit(parseInt(limit))
+          .toArray();
+
+        // Get total count for pagination
+        const total = await productsCollection.countDocuments(query);
+        console.log("total",total)
+
+        res.send({ products: result, total });
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch products", error: error.message });
+      }
+    });
+
 
     // get all approve product by id
     app.get("/allProduct/:id", async (req, res) => {
@@ -298,7 +353,7 @@ async function run() {
       const result = await productsCollection.find({ status: "Approve" }).sort({ date: -1 }).limit(10).toArray();
       res.send(result)
     })
-   
+
     // customer product select cart item add database
     app.post("/cartItem", verifyToken, async (req, res) => {
       const productData = req.body;
@@ -307,25 +362,25 @@ async function run() {
     })
 
     // cart item count by specific customer
-    app.get("/count/:email", async(req,res) =>{
+    app.get("/count/:email", async (req, res) => {
       const email = req.params.email;
-      const query = {email: email};
+      const query = { email: email };
       const cartCount = await cartsCollection.countDocuments(query);
       const wishCount = await wishlistCollection.countDocuments(query);
-      
-      res.send({cartCount,wishCount})
+
+      res.send({ cartCount, wishCount })
 
     })
 
     // customer product select wish item add database
-    app.post("/wishlistItem",verifyToken, async (req, res) => {
+    app.post("/wishlistItem", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await wishlistCollection.insertOne(productData);
       res.send(result)
     })
 
     // specific customer wishlist product delete from database
-    app.delete("/wishlistProduct-delete/:id",verifyToken, async (req, res) => {
+    app.delete("/wishlistProduct-delete/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await wishlistCollection.deleteOne(query);
@@ -376,30 +431,49 @@ async function run() {
       res.send(result)
     })
 
+    // top sell product get from database
     app.get("/top-seller-product", async (req, res) => {
-        
-        const payments = await paymentCollection.find({ payment: "success" }).toArray();
-       
-        let productIdCounts = {};
-        payments.forEach(payment => {
-          payment.productIds.forEach(productId => {
-            productIdCounts[productId] = (productIdCounts[productId] || 0) + 1; 
-          });
+
+      const payments = await paymentCollection.find({ payment: "success" }).toArray();
+
+      let productIdCounts = {};
+      payments.forEach(payment => {
+        payment.productIds.forEach(productId => {
+          productIdCounts[productId] = (productIdCounts[productId] || 0) + 1;
         });
-        
-        const sortedProductIds = Object.entries(productIdCounts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5) 
-          .map(item => item[0]);
-        
-        const topProducts = await productsCollection.find({
-          _id: { $in: sortedProductIds.map(id => new ObjectId(id)) }
-        }).toArray();
-        res.json(topProducts);
-     
+      });
+
+      const sortedProductIds = Object.entries(productIdCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(item => item[0]);
+
+      const topProducts = await productsCollection.find({
+        _id: { $in: sortedProductIds.map(id => new ObjectId(id)) }
+      }).toArray();
+      res.json(topProducts);
+
     })
 
+    // get latest 4 blog data from database
+    app.get("/blog", async(req,res)=>{
+      const result = await blogsCollection.find().sort({ date: -1 }).limit(4).toArray();
+      res.send(result)
+    })
 
+    // get all blog data from database
+    app.get("/allBlog", async(req,res)=>{
+      const result = await blogsCollection.find().toArray();
+      res.send(result)
+    })
+
+    // get specific blog data from database
+    app.get("/allBlog/:id", async(req,res)=>{
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await blogsCollection.findOne(query);
+      res.send(result)
+    })
 
 
     // admin work
@@ -421,6 +495,14 @@ async function run() {
         $set: { role }
       };
       const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result)
+    })
+
+    // add blog
+    app.post("/addBlog", verifyToken, verifyAdmin, async(req,res) =>{
+      const blog = req.body;
+      console.log(blog)
+      const result = await blogsCollection.insertOne(blog);
       res.send(result)
     })
 
