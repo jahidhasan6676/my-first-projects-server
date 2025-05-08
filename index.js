@@ -37,6 +37,7 @@ async function run() {
     const wishlistCollection = db.collection("wishlist");
     const paymentCollection = db.collection("payments");
     const blogsCollection = db.collection("blogs");
+    const reviewCollection = db.collection("review");
 
 
     // jwt related api
@@ -303,7 +304,7 @@ async function run() {
 
         // Search Filter
         if (search) {
-          query.productName = { $regex: search, $options: "i" }; 
+          query.productName = { $regex: search, $options: "i" };
         }
 
         // Sorting
@@ -312,18 +313,18 @@ async function run() {
           sortQuery.price = 1;
         } else if (sort === "price-high") {
           sortQuery.price = -1;
-        } 
+        }
 
         // Get filtered and sorted products
         const result = await productsCollection
           .find(query)
           .sort(sortQuery)
           .toArray();
-          console.log("data:",result)
+        //console.log("data:",result)
 
         // Get total count for pagination
         const total = await productsCollection.countDocuments(query);
-        console.log("total",total)
+        //console.log("total",total)
 
         res.send({ products: result, total });
       } catch (error) {
@@ -448,25 +449,67 @@ async function run() {
     })
 
     // get latest 4 blog data from database
-    app.get("/blog", async(req,res)=>{
+    app.get("/blog", async (req, res) => {
       const result = await blogsCollection.find().sort({ date: -1 }).limit(4).toArray();
       res.send(result)
     })
 
     // get all blog data from database
-    app.get("/allBlog", async(req,res)=>{
+    app.get("/allBlog", async (req, res) => {
       const result = await blogsCollection.find().toArray();
       res.send(result)
     })
 
     // get specific blog data from database
-    app.get("/allBlog/:id", async(req,res)=>{
+    app.get("/allBlog/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await blogsCollection.findOne(query);
       res.send(result)
     })
 
+    // customer send review
+    app.post("/review", verifyToken, async (req, res) => {
+      const review = req.body;
+
+      try {
+        // 1. Insert review into reviewCollection
+        const result = await reviewCollection.insertOne(review);
+
+        // 2. For each product ID, update its rating count and average
+        const productIds = review.productIds;
+
+        for (const id of productIds) {
+          const allReviews = await reviewCollection.find({ productIds: id }).toArray();
+
+          const totalCount = allReviews.length;
+          const totalSum = allReviews.reduce((sum, r) => sum + parseInt(r.rating), 0);
+          const avgRating = totalSum / totalCount;
+
+          await productsCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+              $set: {
+                ratingCount: totalCount,
+                averageRating: parseFloat(avgRating.toFixed(1))
+              }
+            }
+          );
+        }
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error posting review:", error);
+        res.status(500).send({ message: "Something went wrong" });
+      }
+    });
+
+    // review get from database
+    app.get("/reviews/:productId", async (req, res) => {
+      const productId = req.params.productId;
+      const result = await reviewCollection.find({ productIds: productId }).toArray();
+      res.send(result);
+    })
 
     // admin work
 
@@ -491,7 +534,7 @@ async function run() {
     })
 
     // add blog
-    app.post("/addBlog", verifyToken, verifyAdmin, async(req,res) =>{
+    app.post("/addBlog", verifyToken, verifyAdmin, async (req, res) => {
       const blog = req.body;
       console.log(blog)
       const result = await blogsCollection.insertOne(blog);
