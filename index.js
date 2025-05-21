@@ -246,6 +246,183 @@ async function run() {
       res.send(result);
     })
 
+    // seller total product,order,sales and profit count
+    app.get("/seller-activity-count/:email", verifyToken, verifySeller, async (req, res) => {
+      const sellerEmail = req.params.email;
+      //console.log("Seller Email:", sellerEmail);
+
+      try {
+        // 1️⃣ Step 1: Total Products Count from productsCollection
+        const totalProductCount = await productsCollection.countDocuments({
+          "ownerInfo.email": sellerEmail
+        });
+        //console.log("totalProducts:", totalProductCount)
+
+        // 2️⃣ Step 2: Aggregation on paymentsCollection
+        const paymentStats = await paymentCollection.aggregate([
+          {
+            $unwind: "$productIds"
+          },
+          {
+            $addFields: {
+              productObjectId: { $toObjectId: "$productIds" }
+            }
+          },
+          {
+            $lookup: {
+              from: "products",
+              localField: "productObjectId",
+              foreignField: "_id",
+              as: "productDetails"
+            }
+          },
+          {
+            $unwind: "$productDetails"
+          },
+          {
+            $match: {
+              "productDetails.ownerInfo.email": sellerEmail
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalOrders: { $sum: 1 },
+              totalSales: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0]
+                }
+              },
+              totalProfit: { $sum: "$price" }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              totalOrders: 1,
+              totalSales: 1,
+              totalProfit: 1
+            }
+          }
+        ]).toArray();
+
+        const stats = paymentStats[0] || {
+          totalOrders: 0,
+          totalSales: 0,
+          totalProfit: 0
+        };
+
+        // 3️⃣ Final Result
+        const result = {
+          totalProducts: totalProductCount,
+          totalOrders: stats.totalOrders,
+          totalSales: stats.totalSales,
+          totalProfit: stats.totalProfit
+        };
+
+        //console.log("Final Result:", result);
+        res.send(result);
+
+      } catch (error) {
+        console.error("Error fetching seller stats:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    // seller sales and order chat data
+    app.get("/seller-chart-stats/:email", verifyToken, verifySeller, async (req, res) => {
+      const sellerEmail = req.params.email;
+    
+      try {
+        const stats = await paymentCollection.aggregate([
+          {
+            $unwind: "$productIds"
+          },
+          {
+            $addFields: {
+              productObjectId: { $toObjectId: "$productIds" }
+            }
+          },
+          {
+            $lookup: {
+              from: "products",
+              localField: "productObjectId",
+              foreignField: "_id",
+              as: "productDetails"
+            }
+          },
+          {
+            $unwind: "$productDetails"
+          },
+          {
+            $match: {
+              "productDetails.ownerInfo.email": sellerEmail
+            }
+          },
+          {
+            $addFields: {
+              month: { $month: { $toDate: "$date" } },
+              year: { $year: { $toDate: "$date" } }
+            }
+          },
+          {
+            $group: {
+              _id: {
+                month: "$month",
+                year: "$year"
+              },
+              sales: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "Delivered"] }, 1, 0]
+                }
+              },
+              orders: {
+                $sum: {
+                  $cond: [{ $ne: ["$status", "Delivered"] }, 1, 0]
+                }
+              }
+            }
+          },
+          {
+            $sort: {
+              "_id.year": 1,
+              "_id.month": 1
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              name: {
+                $concat: [
+                  {
+                    $arrayElemAt: [
+                      [
+                        "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+                      ],
+                      "$_id.month"
+                    ]
+                  },
+                  " ",
+                  { $toString: "$_id.year" }
+                ]
+              },
+              sales: 1,
+              orders: 1
+            }
+          }
+        ]).toArray();
+    
+        res.send(stats);
+    
+      } catch (error) {
+        console.error("Error fetching monthly chart stats:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+    
+
+
 
     // moderator work
 
