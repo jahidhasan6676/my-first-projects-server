@@ -773,6 +773,127 @@ async function run() {
       res.send(result)
     })
 
+    // admin dashboard stats count
+    app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
+      // ✅ Total Customers (role: 'user')
+      const totalCustomers = await usersCollection.countDocuments({ role: "customer" });
+
+      // ✅ Total Sellers (role: 'seller')
+      const totalSellers = await usersCollection.countDocuments({ role: "seller" });
+
+      // ✅ Total Products
+      const totalProducts = await productsCollection.estimatedDocumentCount();
+
+      // ✅ Total Revenue (successful payments only)
+      const successfulPayments = await paymentCollection.find({ payment: "success" }).toArray();
+      const totalRevenue = successfulPayments.reduce((sum, item) => sum + item.price, 0);
+
+      res.send({
+        totalCustomers,
+        totalSellers,
+        totalProducts,
+        totalRevenue,
+      });
+    })
+
+    // user growth chart
+    app.get('/user-growth', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await usersCollection.aggregate([
+        {
+          $match: {
+            role: { $in: ["seller", "customer"] }
+          }
+        },
+        {
+          $addFields: {
+            month: {
+              $dateToString: { format: "%Y-%m", date: { $toDate: "$timestamp" } }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: { month: "$month", role: "$role" },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $group: {
+            _id: "$_id.month",
+            sellers: {
+              $sum: {
+                $cond: [{ $eq: ["$_id.role", "seller"] }, "$count", 0]
+              }
+            },
+            customers: {
+              $sum: {
+                $cond: [{ $eq: ["$_id.role", "customer"] }, "$count", 0]
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            month: "$_id",
+            sellers: 1,
+            customers: 1
+          }
+        },
+        {
+          $sort: { month: 1 }
+        }
+      ]).toArray();
+
+      res.send(result);
+    });
+
+    // financial chart
+    app.get('/financial-growth', async (req, res) => {
+      const result = await paymentCollection.aggregate([
+        {
+          $match: {
+            status: "Delivered"
+          }
+        },
+        {
+          $addFields: {
+            month: {
+              $dateToString: {
+                format: "%Y-%m",
+                date: { $toDate: "$date" }
+              }
+            },
+            productCount: {
+              $size: "$productIds"
+            }
+          }
+        },
+        {
+          $group: {
+            _id: "$month",
+            totalSoldProducts: { $sum: "$productCount" },
+            totalRevenue: { $sum: "$price" }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            month: "$_id",
+            totalSoldProducts: 1,
+            totalRevenue: 1
+          }
+        },
+        {
+          $sort: {
+            month: 1
+          }
+        }
+      ]).toArray();
+
+      res.send(result);
+    });
+
 
 
     // payment intent
