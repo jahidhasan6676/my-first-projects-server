@@ -193,7 +193,8 @@ async function run() {
       const orders = await paymentCollection.aggregate([
         {
           $match: {
-            productIds: { $in: productIds }
+            productIds: { $in: productIds },
+            status: { $ne: "Delivered" }
           }
         },
         {
@@ -233,6 +234,60 @@ async function run() {
       res.send(orders);
 
     });
+
+    // delivered order history
+    app.get("/order-history/:email", verifyToken, verifySeller, async (req, res) => {
+      const email = req.params.email;
+      const query = { 'ownerInfo.email': email };
+
+      const products = await productsCollection.find(query).toArray();
+      const productIds = products.map(product => product._id.toString());
+
+      const orders = await paymentCollection.aggregate([
+        {
+          $match: {
+            productIds: { $in: productIds },
+            status: "Delivered"
+          }
+        },
+        {
+          $addFields: {
+            productIds: {
+              $map: {
+                input: "$productIds",
+                as: "productId",
+                in: { $toObjectId: "$$productId" }
+              }
+            }
+          }
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productIds",
+            foreignField: "_id",
+            as: "productItems"
+          }
+        },
+        {
+          $project: {
+            email: 1,
+            name: 1,
+            price: 1,
+            transactionId: 1,
+            status: 1,
+            deliveryInfo: 1,
+            payment: 1,
+            method: 1,
+            date: 1,
+            "productItems.productName": 1,
+          }
+        }
+      ]).toArray();
+
+      res.send(orders);
+    });
+
 
     // order product delivery update
     app.patch("/order-placed-update/:id", verifyToken, verifySeller, async (req, res) => {
@@ -332,7 +387,7 @@ async function run() {
     // seller sales and order chat data
     app.get("/seller-chart-stats/:email", verifyToken, verifySeller, async (req, res) => {
       const sellerEmail = req.params.email;
-    
+
       try {
         const stats = await paymentCollection.aggregate([
           {
@@ -412,15 +467,15 @@ async function run() {
             }
           }
         ]).toArray();
-    
+
         res.send(stats);
-    
+
       } catch (error) {
         console.error("Error fetching monthly chart stats:", error);
         res.status(500).json({ message: "Server error" });
       }
     });
-    
+
 
 
 
