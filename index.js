@@ -6,12 +6,15 @@ const app = express();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { default: axios } = require("axios");
+
 
 app.use(cors([
   "http://localhost:5173/",
   "https://shopper-application-3cae2.web.app"
 ]));
 app.use(express.json());
+app.use(express.urlencoded());
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.wwm8j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -38,6 +41,7 @@ async function run() {
     const paymentCollection = db.collection("payments");
     const blogsCollection = db.collection("blogs");
     const reviewCollection = db.collection("review");
+    const sslPayment = db.collection("ssl");
 
 
     // jwt related api
@@ -194,7 +198,8 @@ async function run() {
         {
           $match: {
             productIds: { $in: productIds },
-            status: { $ne: "Delivered" }
+            status: { $ne: "Delivered" },
+            payment: "success",
           }
         },
         {
@@ -564,7 +569,6 @@ async function run() {
       }
     });
 
-
     // get all approve product by id
     app.get("/allProduct/:id", async (req, res) => {
       const id = req.params.id;
@@ -648,10 +652,28 @@ async function run() {
       res.send(result)
     })
 
-    // get successfully payment order data
+    // get successfully payment order data without review
     app.get("/order-list/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      const query = { email: email };
+      const query = {
+        email: email,
+        $or: [
+          { review: { $exists: false } },
+          { review: { $ne: "done" } }
+        ],
+        payment: "success",
+      };
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result)
+    })
+
+    // get successfully payment order with review data 
+    app.get("/customer-order-history/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = {
+        email: email,
+        review: "done",
+      };
       const result = await paymentCollection.find(query).toArray();
       res.send(result)
     })
@@ -729,6 +751,12 @@ async function run() {
           );
         }
 
+        // ✅ 3. Update review status in paymentCollection
+        await paymentCollection.updateOne(
+          { productIds: { $all: review.productIds }, email: review.email },
+          { $set: { review: "done" } }
+        );
+
         res.send(result);
       } catch (error) {
         console.error("Error posting review:", error);
@@ -742,6 +770,7 @@ async function run() {
       const result = await reviewCollection.find({ productIds: productId }).toArray();
       res.send(result);
     })
+
 
     // admin work
 
@@ -895,6 +924,7 @@ async function run() {
     });
 
 
+    // stripe payment work
 
     // payment intent
     app.post("/payment-intent", async (req, res) => {
@@ -929,6 +959,101 @@ async function run() {
       res.send({ paymentResult, deleteResult });
     })
 
+
+    // SSLCommerce payment work
+
+    app.post("/create-ssl-payment", verifyToken, async (req, res) => {
+      const payment = req.body;
+      //console.log("payment info", payment)
+
+      const trxId = new ObjectId().toString();
+      payment.transactionId = trxId;
+
+      const initiate = {
+        store_id: "wearh68313179183a5",
+        store_passwd: "wearh68313179183a5@ssl",
+        total_amount: payment.price,
+        currency: 'BDT',
+        tran_id: trxId,
+        success_url: 'http://localhost:5000/success-payment',
+        fail_url: 'http://localhost:5173/fail',
+        cancel_url: 'http://localhost:5173/cancel',
+        ipn_url: 'http://localhost:5000/ipn-success-payment',
+        shipping_method: 'Courier',
+        product_name: 'Computer.',
+        product_category: 'Electronic',
+        product_profile: 'general',
+        cus_name: 'Customer Name',
+        cus_email: `${payment?.email}`,
+        cus_add1: 'Dhaka',
+        cus_add2: 'Dhaka',
+        cus_city: 'Dhaka',
+        cus_state: 'Dhaka',
+        cus_postcode: 1000,
+        cus_country: 'Bangladesh',
+        cus_phone: '01711111111',
+        cus_fax: '01711111111',
+        ship_name: 'Customer Name',
+        ship_add1: 'Dhaka',
+        ship_add2: 'Dhaka',
+        ship_city: 'Dhaka',
+        ship_state: 'Dhaka',
+        ship_postcode: 1000,
+        ship_country: 'Bangladesh',
+      };
+
+      const iniResponse = await axios({
+        url: "https://sandbox.sslcommerz.com/gwprocess/v4/api.php",
+        method: "POST",
+        data: initiate,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        }
+      })
+      const saveData = await paymentCollection.insertOne(payment);
+      const gatewayUrl = iniResponse?.data?.GatewayPageURL;
+
+      //console.log( "gatewayUrl",gatewayUrl)
+      res.send({ gatewayUrl });
+    })
+
+    app.post("/success-payment", verifyToken, async (req, res) => {
+      const successPayment = req.body;
+      //console.log("successPayment", successPayment)
+
+      // payment validation
+      const { data } = await axios.get(`https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${successPayment.val_id}&store_id=wearh68313179183a5&store_passwd=wearh68313179183a5@ssl&format=json`);
+      //console.log(data)
+
+      if (data.status !== "VALID") {
+        return res.send({ message: "Invalid Payment" })
+      }
+
+      // update the payment
+      const updatePayment = await paymentCollection.updateOne(
+        { transactionId: data.tran_id },
+        {
+          $set: {
+            payment: "success",
+          },
+        }
+      )
+
+      const payment = await paymentCollection.findOne({ transactionId: data.tran_id });
+      //console.log("payment", payment)
+
+      const query = {
+        _id: {
+          $in: payment.cartIds.map(id => new ObjectId(id))
+        }
+      }
+      const deleteResult = await cartsCollection.deleteMany(query);
+      //console.log(deleteResult);
+
+      res.redirect("http://localhost:5173/dashboard/paymentHistory")
+      //console.log("updatePayment", updatePayment)
+      //console.log("isValidPayment", data)
+    })
 
     // Send a ping to confirm a successful connection
     //await client.db("admin").command({ ping: 1 });
