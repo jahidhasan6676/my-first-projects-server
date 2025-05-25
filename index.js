@@ -7,7 +7,6 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { default: axios } = require("axios");
-const { redirect } = require("react-router-dom");
 
 
 app.use(cors([
@@ -976,10 +975,10 @@ async function run() {
         total_amount: payment.price,
         currency: 'BDT',
         tran_id: trxId,
-        success_url: 'https://shopper-application-3cae2.web.app/success-payment',
-        fail_url: 'https://shopper-application-3cae2.web.app/fail',
+        success_url: 'http://localhost:5000/success-payment',
+        fail_url: 'http://localhost:5173/fail',
         cancel_url: 'http://localhost:5173/cancel',
-        ipn_url: 'https://shopper-application-3cae2.web.app/ipn-success-payment',
+        ipn_url: 'http://localhost:5000/ipn-success-payment',
         shipping_method: 'Courier',
         product_name: 'Computer.',
         product_category: 'Electronic',
@@ -1027,8 +1026,7 @@ async function run() {
       //console.log(data)
 
       if (data.status !== "VALID") {
-         res.redirect("https://shopper-application-3cae2.web.app/fail")
-        // return res.send({ message: "Invalid Payment" })
+        return res.send({ message: "Invalid Payment" })
       }
 
       // update the payment
