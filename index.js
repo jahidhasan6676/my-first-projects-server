@@ -962,7 +962,7 @@ async function run() {
 
     // SSLCommerce payment work
 
-    app.post("/create-ssl-payment", verifyToken, async (req, res) => {
+    app.post("/create-ssl-payment", async (req, res) => {
       const payment = req.body;
       //console.log("payment info", payment)
 
@@ -975,10 +975,10 @@ async function run() {
         total_amount: payment.price,
         currency: 'BDT',
         tran_id: trxId,
-        success_url: 'http://localhost:5000/success-payment',
-        fail_url: 'http://localhost:5173/fail',
-        cancel_url: 'http://localhost:5173/cancel',
-        ipn_url: 'http://localhost:5000/ipn-success-payment',
+        success_url: 'https://shopper-application-3cae2.web.app/success-payment',
+        fail_url: 'https://shopper-application-3cae2.web.app/fail',
+        cancel_url: 'https://shopper-application-3cae2.web.app/cancel',
+        ipn_url: 'https://shopper-application-3cae2.web.app/ipn-success-payment',
         shipping_method: 'Courier',
         product_name: 'Computer.',
         product_category: 'Electronic',
@@ -1017,16 +1017,17 @@ async function run() {
       res.send({ gatewayUrl });
     })
 
-    app.post("/success-payment", verifyToken, async (req, res) => {
+    app.post("/success-payment", async (req, res) => {
       const successPayment = req.body;
-      //console.log("successPayment", successPayment)
+      console.log("successPayment", successPayment)
 
       // payment validation
       const { data } = await axios.get(`https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${successPayment.val_id}&store_id=wearh68313179183a5&store_passwd=wearh68313179183a5@ssl&format=json`);
-      //console.log(data)
+      console.log("data",data)
 
       if (data.status !== "VALID") {
-        return res.send({ message: "Invalid Payment" })
+        return res.redirect("http://localhost:5173/fail")
+        //return res.send({ message: "Invalid Payment" })
       }
 
       // update the payment
