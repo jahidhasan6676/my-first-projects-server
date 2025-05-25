@@ -7,6 +7,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { default: axios } = require("axios");
+const { redirect } = require("react-router-dom");
 
 
 app.use(cors([
@@ -975,10 +976,10 @@ async function run() {
         total_amount: payment.price,
         currency: 'BDT',
         tran_id: trxId,
-        success_url: 'http://localhost:5000/success-payment',
-        fail_url: 'http://localhost:5173/fail',
+        success_url: 'https://shopper-application-3cae2.web.app/success-payment',
+        fail_url: 'https://shopper-application-3cae2.web.app/fail',
         cancel_url: 'http://localhost:5173/cancel',
-        ipn_url: 'http://localhost:5000/ipn-success-payment',
+        ipn_url: 'https://shopper-application-3cae2.web.app/ipn-success-payment',
         shipping_method: 'Courier',
         product_name: 'Computer.',
         product_category: 'Electronic',
@@ -1026,7 +1027,8 @@ async function run() {
       //console.log(data)
 
       if (data.status !== "VALID") {
-        return res.send({ message: "Invalid Payment" })
+         res.redirect("https://shopper-application-3cae2.web.app/fail")
+        // return res.send({ message: "Invalid Payment" })
       }
 
       // update the payment
@@ -1050,7 +1052,7 @@ async function run() {
       const deleteResult = await cartsCollection.deleteMany(query);
       //console.log(deleteResult);
 
-      res.redirect("http://localhost:5173/dashboard/paymentHistory")
+      res.redirect("https://shopper-application-3cae2.web.app/dashboard/paymentHistory")
       //console.log("updatePayment", updatePayment)
       //console.log("isValidPayment", data)
     })
